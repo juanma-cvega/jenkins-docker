@@ -1,5 +1,4 @@
 FROM centos:7
-MAINTAINER Maxfield Stewart
 
 # Yum workaround to stalled mirror
 RUN sed -i -e 's/enabled=1/enabled=0/g' /etc/yum/pluginconf.d/fastestmirror.conf
@@ -16,9 +15,10 @@ ENV CA_CERTIFICATES_JAVA_VERSION 20140324
 RUN yum -v install -y \
     wget \
     zip \
+    which \
     openssh-client \
     unzip \
-    java-1.8.0-openjdk \
+    java-1.8.0-openjdk-devel \
     git \
     && yum clean all
 
@@ -40,10 +40,21 @@ ENV JENKINS_SHA 5b89b6967e7af8119c52c7e86223b47665417a22
 ENV JENKINS_UC https://updates.jenkins-ci.org
 ENV COPY_REFERENCE_FILE_LOG $JENKINS_HOME/copy_reference_file.log
 
+# SET Java variables
+ENV JAVA_HOME /usr/lib/jvm/java/jre
+ENV PATH /usr/lib/jvm/java/bin:$PATH
+
 # Jenkins is run with user `jenkins`, uid = 1000
 # If you bind mount a volume from the host or a data container,
 # ensure you use the same uid
 RUN useradd -d "$JENKINS_HOME" -u 1000 -m -s /bin/bash jenkins
+
+#Not working. Folder not yet mounted?
+#RUN DOCKER_GID=$(stat -c '%g' /var/run/docker.sock) && \
+
+#Using gid from host
+RUN groupadd -for -g 100 docker && \
+    usermod -aG docker jenkins
 
 # Jenkins home directory is a volume, so configuration and build history
 # can be persisted and survive image upgrades
@@ -79,9 +90,34 @@ COPY plugins.sh /usr/local/bin/plugins.sh
 RUN chmod +x /usr/local/bin/plugins.sh
 RUN chmod +x /usr/local/bin/jenkins.sh
 
+
 # Install default plugins
 COPY plugins.txt /tmp/plugins.txt
 RUN /usr/local/bin/plugins.sh /tmp/plugins.txt
+
+
+# Add ssh key
+RUN eval "$(ssh-agent -s)"
+RUN mkdir /usr/share/jenkins/ref/.ssh && \
+    chmod 700 /usr/share/jenkins/ref/.ssh && \
+    ssh-keyscan github.com > /usr/share/jenkins/ref/.ssh/known_hosts
+
+COPY id_rsa /usr/share/jenkins/ref/.ssh/id_rsa
+COPY id_rsa /usr/share/jenkins/ref/.ssh/id_rsa.pub
+COPY hudson.tasks.Maven.xml /usr/share/jenkins/ref/hudson.tasks.Maven.xml
+
+RUN chown -R jenkins:jenkins /usr/share/jenkins/ref && \
+    chmod 600 /usr/share/jenkins/ref/.ssh/id_rsa && \
+    chmod 600 /usr/share/jenkins/ref/.ssh/id_rsa.pub && \
+    chmod 600 /usr/share/jenkins/ref/hudson.tasks.Maven.xml
+
+COPY id_rsa /root/.ssh/id_rsa
+COPY id_rsa /root/.ssh/id_rsa.pub
+
+# ssh keys for root. To use root as the user
+RUN chmod 600 /root/.ssh/id_rsa && \
+    chmod 600 /root/.ssh/id_rsa.pub && \
+    ssh-keyscan github.com > /root/.ssh/known_hosts
 
 # Switch to the jenkins user
 USER jenkins

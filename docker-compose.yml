@@ -1,6 +1,14 @@
 data:
+ volumes:
+  - /devops/jenkins/jobs:/var/jenkins_home/jobs
+  - /devops/jenkins/nodes:/var/jenkins_home/nodes
+  - /devops/jenkins/plugins:/var/jenkins_home/plugins
+  - /devops/jenkins/logs:/var/jenkins_home/logs
  build: jenkins-data
 master:
+ volumes:
+   - /var/run/docker.sock:/var/run/docker.sock
+   - /usr/local/bin/docker:/usr/local/bin/docker
  build: jenkins-master
  volumes_from:
   - data
